@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:share/share.dart'; // Share functionality package
+import 'package:intl/intl.dart'; // For date formatting
 import 'add_note_screen.dart';
 import '../models/note.dart';
 
@@ -14,6 +16,8 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   final List<Note> _notes = [];
+  Note? _lastDeletedNote; // To store the last deleted note
+  int? _lastDeletedNoteIndex; // To store the index of the last deleted note
 
   void _addNote() async {
     final newNote = await Navigator.push(
@@ -43,10 +47,36 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  void _deleteNote(int index) {
+  void _deleteNoteWithUndo(int index) {
     setState(() {
+      _lastDeletedNote = _notes[index];
+      _lastDeletedNoteIndex = index;
       _notes.removeAt(index);
     });
+
+    // Show Snackbar with undo option
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: const Text('Note deleted'),
+        action: SnackBarAction(
+          label: 'UNDO',
+          onPressed: () {
+            setState(() {
+              if (_lastDeletedNote != null && _lastDeletedNoteIndex != null) {
+                _notes.insert(_lastDeletedNoteIndex!, _lastDeletedNote!);
+                _lastDeletedNote = null; // Clear last deleted note
+                _lastDeletedNoteIndex = null; // Clear index
+              }
+            });
+          },
+        ),
+        duration: const Duration(seconds: 3), // Show Snackbar for 3 seconds
+      ),
+    );
+  }
+
+  void _shareNote(Note note) {
+    Share.share('Title: ${note.title}\n\nContent: ${note.content}');
   }
 
   @override
@@ -59,9 +89,9 @@ class _HomeScreenState extends State<HomeScreen> {
           IconButton(
             icon: Icon(
               widget.isDarkMode ? Icons.light_mode : Icons.dark_mode,
-              color: widget.isDarkMode ? Colors.yellow : Colors.black, // Yellow in dark mode, black in light mode
+              color: widget.isDarkMode ? Colors.yellow : Colors.black,
             ),
-            onPressed: widget.toggleTheme, // Call the toggle function passed from MyApp
+            onPressed: widget.toggleTheme,
           ),
         ],
       ),
@@ -69,27 +99,54 @@ class _HomeScreenState extends State<HomeScreen> {
         itemCount: _notes.length,
         itemBuilder: (context, index) {
           final note = _notes[index];
-          return ListTile(
-            title: Text(note.title),
-            subtitle: Text(note.content),
-            trailing: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                // Edit button
-                IconButton(
-                  icon: const Icon(Icons.edit),
-                  color: Colors.blue, // Blue color for edit button
-                  onPressed: () => _editNote(index),
-                ),
-                // Delete button
-                IconButton(
-                  icon: const Icon(Icons.delete),
-                  color: Colors.red, // Red color for delete button
-                  onPressed: () => _deleteNote(index),
-                ),
-              ],
+          final formattedDate = DateFormat('MMM d, yyyy - hh:mm a').format(note.dateTime);
+
+          return Card(
+            margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            elevation: 4,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            child: ListTile(
+              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              title: Text(
+                note.title,
+                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+              ),
+              subtitle: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.only(top: 8),
+                    child: Text(
+                      note.content,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(color: Colors.grey),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Saved: $formattedDate',
+                    style: const TextStyle(fontSize: 12, color: Colors.grey),
+                  ),
+                ],
+              ),
+              trailing: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  IconButton(
+                    icon: const Icon(Icons.share),
+                    color: Colors.green,
+                    onPressed: () => _shareNote(note),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.delete),
+                    color: Colors.red,
+                    onPressed: () => _deleteNoteWithUndo(index),
+                  ),
+                ],
+              ),
+              onTap: () => _editNote(index),
             ),
-            onTap: () => _editNote(index),
           );
         },
       ),

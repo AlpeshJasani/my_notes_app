@@ -13,6 +13,8 @@ class AddNoteScreen extends StatefulWidget {
 class _AddNoteScreenState extends State<AddNoteScreen> {
   final _titleController = TextEditingController();
   final _contentController = TextEditingController();
+  final FocusNode _titleFocusNode = FocusNode(); // Manage focus for the title
+  final FocusNode _contentFocusNode = FocusNode(); // Manage focus for the content
 
   @override
   void initState() {
@@ -42,47 +44,55 @@ class _AddNoteScreenState extends State<AddNoteScreen> {
       appBar: AppBar(
         title: Text(widget.note == null ? 'Add Note' : 'Edit Note'),
         actions: [
-          // Only show the Save/Update button (no delete button)
+          // Save or update button
           IconButton(
             icon: Icon(widget.note == null ? Icons.save : Icons.update),
             onPressed: _saveNote,
           ),
         ],
       ),
-      body: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            // Title text field with placeholder
-            TextField(
-              controller: _titleController,
-              decoration: InputDecoration(
-                hintText: 'Enter Note Title',
-                hintStyle: const TextStyle(color: Colors.grey),
-                border: InputBorder.none,
-                contentPadding: const EdgeInsets.symmetric(vertical: 8.0),
-              ),
-              style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
-              autofocus: true,
-            ),
-            const SizedBox(height: 16),
-            // Content text field (no label)
-            Expanded(
-              child: TextField(
-                controller: _contentController,
-                decoration: const InputDecoration(
-                  hintText: 'Write your note here...',
-                  hintStyle: TextStyle(color: Colors.grey),
+      body: GestureDetector(
+        onTap: () {
+          // Dismiss the keyboard when tapping outside text fields
+          _titleFocusNode.unfocus();
+          _contentFocusNode.unfocus();
+        },
+        child: Padding(
+          padding: const EdgeInsets.all(16.0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              // Title text field with manual focus
+              TextField(
+                controller: _titleController,
+                focusNode: _titleFocusNode,
+                decoration: InputDecoration(
+                  hintText: 'Enter Note Title',
+                  hintStyle: const TextStyle(color: Colors.grey),
                   border: InputBorder.none,
-                  contentPadding: EdgeInsets.symmetric(vertical: 8.0),
+                  contentPadding: const EdgeInsets.symmetric(vertical: 8.0),
                 ),
-                maxLines: null, // Allows multiple lines of text
-                keyboardType: TextInputType.multiline,
-                style: const TextStyle(fontSize: 18),
+                style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
               ),
-            ),
-          ],
+              const SizedBox(height: 16),
+              // Content text field with manual focus
+              Expanded(
+                child: TextField(
+                  controller: _contentController,
+                  focusNode: _contentFocusNode,
+                  decoration: const InputDecoration(
+                    hintText: 'Write your note here...',
+                    hintStyle: TextStyle(color: Colors.grey),
+                    border: InputBorder.none,
+                    contentPadding: EdgeInsets.symmetric(vertical: 8.0),
+                  ),
+                  maxLines: null, // Allows multiple lines of text
+                  keyboardType: TextInputType.multiline,
+                  style: const TextStyle(fontSize: 18),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -92,6 +102,8 @@ class _AddNoteScreenState extends State<AddNoteScreen> {
   void dispose() {
     _titleController.dispose();
     _contentController.dispose();
+    _titleFocusNode.dispose(); // Dispose of focus nodes
+    _contentFocusNode.dispose();
     super.dispose();
   }
 }
