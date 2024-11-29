@@ -62,11 +62,15 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   void _deleteNoteWithUndo(int index) {
-    final Note deletedNote = _notes[index]; // Store the note that will be deleted
+    // Use the note from the filtered list to ensure correct deletion
+    final Note deletedNote = _filteredNotes[index];
 
     setState(() {
-      _notes.removeAt(index);
-      _filteredNotes = _notes; // Update filtered notes after deletion
+      _notes.remove(deletedNote); // Remove the note from the main list
+      _filteredNotes = _notes.where((note) {
+        return note.title.toLowerCase().contains(_searchQuery.toLowerCase()) ||
+            note.content.toLowerCase().contains(_searchQuery.toLowerCase());
+      }).toList(); // Update filtered notes
     });
 
     ScaffoldMessenger.of(context).showSnackBar(
@@ -76,9 +80,12 @@ class _HomeScreenState extends State<HomeScreen> {
           label: 'UNDO',
           onPressed: () {
             setState(() {
-              // If "UNDO" is pressed, restore the deleted note
-              _notes.insert(index, deletedNote); // Insert the deleted note back at the original index
-              _filteredNotes = _notes; // Update filtered notes
+              // Restore the deleted note
+              _notes.add(deletedNote);
+              _filteredNotes = _notes.where((note) {
+                return note.title.toLowerCase().contains(_searchQuery.toLowerCase()) ||
+                    note.content.toLowerCase().contains(_searchQuery.toLowerCase());
+              }).toList(); // Update filtered notes
             });
           },
         ),
@@ -88,7 +95,7 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   void _shareNote(Note note) {
-    Share.share('Title: ${note.title}\n\nContent: ${note.content}');
+    Share.share('Title: ${note.title}\n\nContent:\n${note.content}\n\n${DateFormat('d MMM, yyyy - hh:mm a').format(note.dateTime)}');
   }
 
   void _searchNotes(String query) {
@@ -112,125 +119,140 @@ class _HomeScreenState extends State<HomeScreen> {
     });
   }
 
+  Future<bool> _onWillPop() async {
+    if (_isSearchActive) {
+      setState(() {
+        _isSearchActive = false;
+        _searchQuery = '';
+        _filteredNotes = _notes; // Reset to the full list
+      });
+      return false; // Prevent the app from closing
+    }
+    return true; // Allow the app to close
+  }
+
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('My Notes'),
-        actions: [
-          IconButton(
-            icon: Icon(_isSearchActive ? Icons.close : Icons.search),
-            color: widget.isDarkMode ? Colors.white : Colors.black,
-            onPressed: () {
-              setState(() {
-                if (_isSearchActive) {
-                  _isSearchActive = false;
-                  _searchQuery = '';
-                  _filteredNotes = _notes;
-                } else {
-                  _isSearchActive = true;
-                }
-              });
-            },
-          ),
-          IconButton(
-            icon: Icon(
-              _isSortedByDate ? CupertinoIcons.sort_down : CupertinoIcons.sort_up, // Cupertino icons for sorting
+    return WillPopScope(
+      onWillPop: _onWillPop,
+      child: Scaffold(
+        appBar: AppBar(
+          title: const Text('My Notes'),
+          actions: [
+            IconButton(
+              icon: Icon(_isSearchActive ? Icons.close : Icons.search),
               color: widget.isDarkMode ? Colors.white : Colors.black,
-            ),
-            onPressed: () {
-              setState(() {
-                _isSortedByDate = !_isSortedByDate;
-                _sortNotes();
-              });
-            },
-          ),
-          IconButton(
-            icon: Icon(
-              widget.isDarkMode ? Icons.light_mode : Icons.dark_mode,
-              color: widget.isDarkMode ? Colors.yellow : Colors.black,
-            ),
-            onPressed: widget.toggleTheme,
-          ),
-        ],
-      ),
-      body: Column(
-        children: [
-          if (_isSearchActive)
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              child: TextField(
-                autofocus: true,
-                decoration: const InputDecoration(
-                  labelText: 'Search notes...',
-                  border: OutlineInputBorder(),
-                  suffixIcon: Icon(Icons.search),
-                ),
-                onChanged: _searchNotes,
-              ),
-            ),
-          Expanded(
-            child: ListView.builder(
-              itemCount: _filteredNotes.length,
-              itemBuilder: (context, index) {
-                final note = _filteredNotes[index];
-                final formattedDate = DateFormat('MMM d, yyyy - hh:mm a').format(note.dateTime);
-
-                return Card(
-                  margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                  elevation: 4,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                  child: ListTile(
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                    title: Text(
-                      note.title,
-                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
-                    ),
-                    subtitle: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Padding(
-                          padding: const EdgeInsets.only(top: 8),
-                          child: Text(
-                            note.content,
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(color: Colors.grey),
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        Text(
-                          'Saved: $formattedDate',
-                          style: const TextStyle(fontSize: 12, color: Colors.grey),
-                        ),
-                      ],
-                    ),
-                    trailing: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        IconButton(
-                          icon: const Icon(Icons.share),
-                          color: Colors.green,
-                          onPressed: () => _shareNote(note),
-                        ),
-                        IconButton(
-                          icon: const Icon(Icons.delete),
-                          color: Colors.red,
-                          onPressed: () => _deleteNoteWithUndo(index),
-                        ),
-                      ],
-                    ),
-                    onTap: () => _editNote(index),
-                  ),
-                );
+              onPressed: () {
+                setState(() {
+                  if (_isSearchActive) {
+                    _isSearchActive = false;
+                    _searchQuery = '';
+                    _filteredNotes = _notes;
+                  } else {
+                    _isSearchActive = true;
+                  }
+                });
               },
             ),
-          ),
-        ],
-      ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _addNote,
-        child: const Icon(Icons.add),
+            IconButton(
+              icon: Icon(
+                _isSortedByDate ? CupertinoIcons.sort_down : CupertinoIcons.sort_up, // Cupertino icons for sorting
+                color: widget.isDarkMode ? Colors.white : Colors.black,
+              ),
+              onPressed: () {
+                setState(() {
+                  _isSortedByDate = !_isSortedByDate;
+                  _sortNotes();
+                });
+              },
+            ),
+            IconButton(
+              icon: Icon(
+                widget.isDarkMode ? Icons.light_mode : Icons.dark_mode,
+                color: widget.isDarkMode ? Colors.yellow : Colors.black,
+              ),
+              onPressed: widget.toggleTheme,
+            ),
+          ],
+        ),
+        body: Column(
+          children: [
+            if (_isSearchActive)
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                child: TextField(
+                  autofocus: true,
+                  decoration: const InputDecoration(
+                    labelText: 'Search notes...',
+                    border: OutlineInputBorder(),
+                    suffixIcon: Icon(Icons.search),
+                  ),
+                  onChanged: _searchNotes,
+                ),
+              ),
+            Expanded(
+              child: ListView.builder(
+                itemCount: _filteredNotes.length,
+                itemBuilder: (context, index) {
+                  final note = _filteredNotes[index];
+                  final formattedDate = DateFormat('d MMM, yyyy - hh:mm a').format(note.dateTime);
+
+                  return Card(
+                    margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                    elevation: 4,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                    child: ListTile(
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                      title: Text(
+                        note.title,
+                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+                      ),
+                      subtitle: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Padding(
+                            padding: const EdgeInsets.only(top: 2),
+                            child: Text(
+                              note.content,
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(color: Colors.grey),
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            '$formattedDate',
+                            style: const TextStyle(fontSize: 12, color: Colors.white38),
+                          ),
+                        ],
+                      ),
+                      trailing: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          IconButton(
+                            icon: const Icon(Icons.share),
+                            color: Colors.green,
+                            onPressed: () => _shareNote(note),
+                          ),
+                          IconButton(
+                            icon: const Icon(Icons.delete),
+                            color: Colors.red,
+                            onPressed: () => _deleteNoteWithUndo(index),
+                          ),
+                        ],
+                      ),
+                      onTap: () => _editNote(index),
+                    ),
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
+        floatingActionButton: FloatingActionButton(
+          onPressed: _addNote,
+          child: const Icon(Icons.add),
+        ),
       ),
     );
   }
