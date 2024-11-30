@@ -2,8 +2,62 @@ import 'package:flutter/material.dart';
 import 'package:flutter/cupertino.dart'; // Import Cupertino icons
 import 'package:share/share.dart'; // Share functionality package
 import 'package:intl/intl.dart'; // For date formatting
+import 'package:shared_preferences/shared_preferences.dart'; // For persistent storage
+import 'dart:convert'; // For JSON serialization
 import 'add_note_screen.dart';
 import '../models/note.dart';
+
+void main() {
+  runApp(const MyApp());
+}
+
+class MyApp extends StatefulWidget {
+  const MyApp({super.key});
+
+  @override
+  _MyAppState createState() => _MyAppState();
+}
+
+class _MyAppState extends State<MyApp> {
+  bool _isDarkMode = false; // Global theme state
+
+  @override
+  void initState() {
+    super.initState();
+    _loadDarkMode(); // Load saved dark mode preference
+  }
+
+  // Load dark mode preference from SharedPreferences
+  Future<void> _loadDarkMode() async {
+    final prefs = await SharedPreferences.getInstance();
+    setState(() {
+      _isDarkMode = prefs.getBool('isDarkMode') ?? false; // Default to light mode if not set
+    });
+  }
+
+  // Toggle dark mode and save preference
+  Future<void> _toggleDarkMode() async {
+    final prefs = await SharedPreferences.getInstance();
+    setState(() {
+      _isDarkMode = !_isDarkMode; // Toggle dark mode state
+      prefs.setBool('isDarkMode', _isDarkMode); // Save updated dark mode state
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      title: 'Notes App',
+      theme: _isDarkMode
+          ? ThemeData.dark() // Dark theme
+          : ThemeData.light(), // Light theme
+      home: HomeScreen(
+        toggleTheme: _toggleDarkMode,
+        isDarkMode: _isDarkMode,
+      ),
+    );
+  }
+}
 
 class HomeScreen extends StatefulWidget {
   final VoidCallback toggleTheme; // Callback to toggle theme
@@ -20,12 +74,30 @@ class _HomeScreenState extends State<HomeScreen> {
   List<Note> _filteredNotes = [];
   String _searchQuery = ''; // Current search query
   bool _isSearchActive = false; // Flag to check if search bar is active
-  bool _isSortedByDate = true; // Flag for sorting by date (newest to oldest)
+  bool _isSortedByDate = false; // Flag for sorting by date (newest to oldest)
 
   @override
   void initState() {
     super.initState();
-    _filteredNotes = _notes; // Initialize filtered notes with all notes
+    _loadNotes(); // Load saved notes
+  }
+
+  Future<void> _saveNotes() async {
+    final prefs = await SharedPreferences.getInstance();
+    final notesJson = jsonEncode(_notes.map((note) => note.toJson()).toList());
+    await prefs.setString('notes', notesJson);
+  }
+
+  Future<void> _loadNotes() async {
+    final prefs = await SharedPreferences.getInstance();
+    final notesJson = prefs.getString('notes');
+    if (notesJson != null) {
+      final List decodedList = jsonDecode(notesJson);
+      setState(() {
+        _notes.addAll(decodedList.map((data) => Note.fromJson(data)));
+        _filteredNotes = _notes;
+      });
+    }
   }
 
   void _addNote() async {
@@ -40,6 +112,7 @@ class _HomeScreenState extends State<HomeScreen> {
         _notes.add(newNote as Note);
         _filteredNotes = _notes; // Update filtered notes
       });
+      _saveNotes(); // Save notes after adding
     }
   }
 
@@ -58,20 +131,19 @@ class _HomeScreenState extends State<HomeScreen> {
         _isSearchActive = false;
         _searchQuery = '';
       });
+      _saveNotes(); // Save notes after editing
     }
   }
 
   void _deleteNoteWithUndo(int index) {
-    // Use the note from the filtered list to ensure correct deletion
     final Note deletedNote = _filteredNotes[index];
+    final originalIndex = _notes.indexOf(deletedNote);
 
     setState(() {
-      _notes.remove(deletedNote); // Remove the note from the main list
-      _filteredNotes = _notes.where((note) {
-        return note.title.toLowerCase().contains(_searchQuery.toLowerCase()) ||
-            note.content.toLowerCase().contains(_searchQuery.toLowerCase());
-      }).toList(); // Update filtered notes
+      _filteredNotes.removeAt(index);
+      _notes.remove(deletedNote);
     });
+    _saveNotes(); // Save notes after deletion
 
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
@@ -80,13 +152,10 @@ class _HomeScreenState extends State<HomeScreen> {
           label: 'UNDO',
           onPressed: () {
             setState(() {
-              // Restore the deleted note
-              _notes.add(deletedNote);
-              _filteredNotes = _notes.where((note) {
-                return note.title.toLowerCase().contains(_searchQuery.toLowerCase()) ||
-                    note.content.toLowerCase().contains(_searchQuery.toLowerCase());
-              }).toList(); // Update filtered notes
+              _notes.insert(originalIndex, deletedNote);
+              _filteredNotes = _notes;
             });
+            _saveNotes(); // Save notes after undo
           },
         ),
         duration: const Duration(seconds: 3),
@@ -95,7 +164,8 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   void _shareNote(Note note) {
-    Share.share('Title: ${note.title}\n\nContent:\n${note.content}\n\n${DateFormat('d MMM, yyyy - hh:mm a').format(note.dateTime)}');
+    Share.share(
+        'Title: ${note.title}\n\nContent:\n${note.content}\n\n${DateFormat('d MMM, yyyy - hh:mm a').format(note.dateTime)}');
   }
 
   void _searchNotes(String query) {
@@ -156,7 +226,9 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
             IconButton(
               icon: Icon(
-                _isSortedByDate ? CupertinoIcons.sort_down : CupertinoIcons.sort_up, // Cupertino icons for sorting
+                _isSortedByDate
+                    ? CupertinoIcons.sort_down
+                    : CupertinoIcons.sort_up, // Cupertino icons for sorting
                 color: widget.isDarkMode ? Colors.white : Colors.black,
               ),
               onPressed: () {
@@ -195,7 +267,8 @@ class _HomeScreenState extends State<HomeScreen> {
                 itemCount: _filteredNotes.length,
                 itemBuilder: (context, index) {
                   final note = _filteredNotes[index];
-                  final formattedDate = DateFormat('d MMM, yyyy - hh:mm a').format(note.dateTime);
+                  final formattedDate =
+                  DateFormat('d MMM, yyyy - hh:mm a').format(note.dateTime);
 
                   return Card(
                     margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
